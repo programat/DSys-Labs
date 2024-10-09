@@ -1,3 +1,5 @@
+package lab1;
+
 import mpi.*;
 import java.nio.charset.StandardCharsets;
 
