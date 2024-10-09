@@ -61,14 +61,20 @@ public class Main {
         int nextRank = (rank + 1) % size;
         int prevRank = (rank - 1 + size) % size;
         Request sendRequest, recvRequest;
-        Status status;
 
         for (int i = 0; i < size - 1; i++) {
             printSendReceive(rank, nextRank, prevRank, buf[0]);
             sendRequest = MPI.COMM_WORLD.Isend(buf, 0, 1, MPI.INT, nextRank, 0);
             recvRequest = MPI.COMM_WORLD.Irecv(buf, 0, 1, MPI.INT, prevRank, 0);
 
-            status = recvRequest.Wait();
+            Status status = recvRequest.Wait();
+            if (status.source != prevRank) {
+                System.out.println("Unexpected sender: " + status.source);
+            }
+            if (status.tag != 0) {
+                System.out.println("Unexpected tag: " + status.tag);
+            }
+
             sendRequest.Wait();
 
             s[0] += buf[0];
