@@ -163,4 +163,7 @@ private static void nonBlockingMode(int rank, int size, int[] buf, int[] s) thro
    mpjrun.sh -np 6 RingSum
    ```
 
+   ![image](https://github.com/user-attachments/assets/91ed5b8c-74b2-40dc-a793-9114eec7da7a)
+
+
 
