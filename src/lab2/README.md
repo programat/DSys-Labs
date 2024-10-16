@@ -155,12 +155,12 @@ private static void nonBlockingMode(int rank, int size, int[] buf, int[] s) thro
 
 1. Скомпилируйте программу:
    ```
-   javac -cp .:$MPJ_HOME/lib/mpj.jar RingSum.java
+   javac -cp .:$MPJ_HOME/lib/mpj.jar Main.java
    ```
 
 2. Запустите программу на нескольких процессорах (например, на 6):
    ```
-   mpjrun.sh -np 6 RingSum
+   mpjrun.sh -np 6 Main
    ```
 
    ![image](https://github.com/user-attachments/assets/91ed5b8c-74b2-40dc-a793-9114eec7da7a)
