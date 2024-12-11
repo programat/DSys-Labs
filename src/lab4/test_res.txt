@@ -1,0 +1,26 @@
+/Library/Java/JavaVirtualMachines/openjdk-11.jdk/Contents/Home/bin/java -jar /Users/egorken/mpj-express/lib/starter.jar -np 9 -javaagent:/Applications/IntelliJ IDEA.app/Contents/lib/idea_rt.jar=61622:/Applications/IntelliJ IDEA.app/Contents/bin -Dfile.encoding=UTF-8 -classpath /Users/egorken/IdeaProjects/uni/lab1/out/production/DSys:/Users/egorken/mpj-express/lib/mpj.jar:/Users/egorken/mpj-express/lib/mpi.jar:/Users/egorken/mpj-express/lib/starter.jar lab4.Main
+MPJ Express (0.44) is started in the multicore configuration
+Программа вычисления скалярного произведения векторов
+Количество процессов: 9
+Размер векторов: 100
+Последовательное время: 2,17 мкс, Результат: 25,96
+Параллельное время: 7,41 мс, Результат: 25,96
+Ускорение: 0,00
+Размер векторов: 1000
+Последовательное время: 12,42 мкс, Результат: 255,04
+Параллельное время: 2,34 мс, Результат: 255,04
+Ускорение: 0,01
+Размер векторов: 10000
+Последовательное время: 117,75 мкс, Результат: 2483,62
+Параллельное время: 3,13 мс, Результат: 2483,62
+Ускорение: 0,04
+Размер векторов: 100000
+Последовательное время: 1,07 мс, Результат: 25049,59
+Параллельное время: 4,43 мс, Результат: 25049,59
+Ускорение: 0,24
+Размер векторов: 1000000
+Последовательное время: 2,41 мс, Результат: 249582,47
+Параллельное время: 11,55 мс, Результат: 249582,47
+Ускорение: 0,21
+
+Process finished with exit code 0
