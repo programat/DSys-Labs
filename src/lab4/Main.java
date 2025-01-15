@@ -7,10 +7,19 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Random;
+import java.nio.ByteBuffer;
 
 public class Main {
-    // тип обмена данными (выбираем один)
-    private static final int EXCHANGE_TYPE = 3; // 1 - Send/Recv, 2 - Broadcast/Reduce, 3 - Scatter/Gather
+    private enum ExchangeType {
+        SEND_RECV,           // Обычный Send/Recv
+        SYNC_SEND_RECV,      // Синхронный Ssend/Recv
+        READY_SEND_RECV,     // Ready Rsend/Recv
+        BUFFERED_SEND_RECV,  // Буферизованный Bsend/Recv
+        BROADCAST_REDUCE,    // Broadcast/Reduce
+        SCATTER_GATHER       // Scatter/Gather
+    }
+
+    private static final ExchangeType EXCHANGE_TYPE = ExchangeType.BUFFERED_SEND_RECV; // выбор типа обмена
 
     public static void main(String[] args) {
         MPI.Init(args);
@@ -18,45 +27,55 @@ public class Main {
         int rank = MPI.COMM_WORLD.Rank();
         int size = MPI.COMM_WORLD.Size();
 
-        // размеры тестовых векторов
-        long[] vectorSizes = {
-                100L,         // 100
-                10_000L,      // 10K
-                100_000L,     // 100K
-                1_000_000L,   // 1M
-                5_000_000L,   // 5M
-                10_000_000L,  // 10M
-        };
-
-        if (rank == 0) {
-            System.out.println(new String("Программа вычисления скалярного произведения векторов".getBytes(StandardCharsets.UTF_8)));
-            System.out.println(new String("Количество процессов: ".getBytes(StandardCharsets.UTF_8)) + size);
-            System.out.println(new String("Тип обмена: ".getBytes(StandardCharsets.UTF_8)) + getExchangeTypeName());
+        // выделяем буфер для нашего буф обмена
+        if (EXCHANGE_TYPE == ExchangeType.BUFFERED_SEND_RECV) {
+            ByteBuffer buffer = ByteBuffer.allocateDirect(1000000);
+            MPI.Buffer_attach(buffer);
         }
 
-        // прогрев JVM
+        long[] vectorSizes = {100L, 10_000L, 100_000L, 1_000_000L, 5_000_000L, 10_000_000L};
+
+        if (rank == 0) {
+            System.out.println("Программа вычисления скалярного произведения векторов");
+            System.out.println("Количество процессов: " + size);
+            System.out.println("Тип обмена: " + EXCHANGE_TYPE);
+        }
+
         warmup(rank, size);
 
-        // основные вычисления
         for (long vectorSize : vectorSizes) {
             int intSize = (int) vectorSize;
             try {
                 switch (EXCHANGE_TYPE) {
-                    case 1:
-                        computeSendRecv(intSize, rank, size);
+                    case SEND_RECV:
+                        computeSendRecv(intSize, rank, size, false, false, false);
                         break;
-                    case 2:
+                    case SYNC_SEND_RECV:
+                        computeSendRecv(intSize, rank, size, true, false, false);
+                        break;
+                    case READY_SEND_RECV:
+                        computeSendRecv(intSize, rank, size, false, true, false);
+                        break;
+                    case BUFFERED_SEND_RECV:
+                        computeSendRecv(intSize, rank, size, false, false, true);
+                        break;
+                    case BROADCAST_REDUCE:
                         computeBroadcastReduce(intSize, rank, size);
                         break;
-                    case 3:
+                    case SCATTER_GATHER:
                         computeScatterGather(intSize, rank, size);
                         break;
                 }
             } catch (Exception e) {
                 if (rank == 0) {
-                    System.out.println("ошибка при размере: " + intSize + ": " + e.getMessage());
+                    System.out.println("Ошибка при размере: " + intSize + ": " + e.getMessage());
                 }
             }
+        }
+
+        // Освобождаем буфер если использовался
+        if (EXCHANGE_TYPE == ExchangeType.BUFFERED_SEND_RECV) {
+            MPI.Buffer_detach();
         }
 
         finalizeJsonFile();
@@ -66,28 +85,37 @@ public class Main {
     // получение названия типа обмена
     private static String getExchangeTypeName() {
         switch (EXCHANGE_TYPE) {
-            case 1:
+            case SEND_RECV:
                 return "Send/Recv";
-            case 2:
+            case SYNC_SEND_RECV:
+                return "Sync Send/Recv";
+            case READY_SEND_RECV:
+                return "Ready Send/Recv";
+            case BUFFERED_SEND_RECV:
+                return "Buffered Send/Recv";
+            case BROADCAST_REDUCE:
                 return "Broadcast/Reduce";
-            case 3:
+            case SCATTER_GATHER:
                 return "Scatter/Gather";
             default:
                 return "Неизвестный тип";
         }
     }
 
+
     // метод с использованием Send/Recv
-    private static void computeSendRecv(int vectorSize, int rank, int size) throws Exception {
+    // основной метод для вычисления с разными типами send/recv
+    private static void computeSendRecv(int vectorSize, int rank, int size,
+                                        boolean sync, boolean ready, boolean buffered) throws Exception {
         int baseChunkSize = vectorSize / size;
         int remainder = vectorSize % size;
 
         if (rank == 0) {
-            // генерация векторов
+            // генерация исходных векторов
             double[] a = generateVector(vectorSize);
             double[] b = generateVector(vectorSize);
 
-            // последовательное вычисление
+            // последовательное вычисление для сравнения
             long seqStartTime = System.nanoTime();
             double seqResult = computeScalarProduct(a, b);
             long seqEndTime = System.nanoTime();
@@ -101,13 +129,30 @@ public class Main {
                 int startIdx = i * baseChunkSize + Math.min(i, remainder);
 
                 // отправка размера части
-                MPI.COMM_WORLD.Send(new int[]{currentChunkSize}, 0, 1, MPI.INT, i, 0);
+                if (sync) {
+                    MPI.COMM_WORLD.Ssend(new int[]{currentChunkSize}, 0, 1, MPI.INT, i, 0);
+                } else if (ready) {
+                    MPI.COMM_WORLD.Rsend(new int[]{currentChunkSize}, 0, 1, MPI.INT, i, 0);
+                } else if (buffered) {
+                    MPI.COMM_WORLD.Bsend(new int[]{currentChunkSize}, 0, 1, MPI.INT, i, 0);
+                } else {
+                    MPI.COMM_WORLD.Send(new int[]{currentChunkSize}, 0, 1, MPI.INT, i, 0);
+                }
 
                 // отправка частей векторов
                 double[] combinedData = new double[currentChunkSize * 2];
                 System.arraycopy(a, startIdx, combinedData, 0, currentChunkSize);
                 System.arraycopy(b, startIdx, combinedData, currentChunkSize, currentChunkSize);
-                MPI.COMM_WORLD.Send(combinedData, 0, combinedData.length, MPI.DOUBLE, i, 1);
+
+                if (sync) {
+                    MPI.COMM_WORLD.Ssend(combinedData, 0, combinedData.length, MPI.DOUBLE, i, 1);
+                } else if (ready) {
+                    MPI.COMM_WORLD.Rsend(combinedData, 0, combinedData.length, MPI.DOUBLE, i, 1);
+                } else if (buffered) {
+                    MPI.COMM_WORLD.Bsend(combinedData, 0, combinedData.length, MPI.DOUBLE, i, 1);
+                } else {
+                    MPI.COMM_WORLD.Send(combinedData, 0, combinedData.length, MPI.DOUBLE, i, 1);
+                }
             }
 
             // вычисление части мастера
@@ -129,10 +174,11 @@ public class Main {
             printResults(vectorSize, seqStartTime, seqEndTime, parStartTime, parEndTime, seqResult, totalSum);
 
         } else {
-            // получение своей части данных
+            // получение размера части
             int[] chunkSize = new int[1];
             MPI.COMM_WORLD.Recv(chunkSize, 0, 1, MPI.INT, 0, 0);
 
+            // получение данных
             double[] combinedData = new double[chunkSize[0] * 2];
             MPI.COMM_WORLD.Recv(combinedData, 0, combinedData.length, MPI.DOUBLE, 0, 1);
 
